@@ -193,6 +193,8 @@ GROUP BY day, truck_id;
 * Architects
 * Developers building IoT, logistics, or geospatial analytics systems
 
+
+
 ## (Optional) Visualizing Fleet Telemetry with Grafana
 
 This optional section walks through launching **Grafana locally using Docker**, connecting it to your TimescaleDB (TigerData) database, and building a simple dashboard to visualize fleet telemetry and geospatial data.
@@ -208,8 +210,6 @@ This optional section walks through launching **Grafana locally using Docker**, 
   - Username
   - Password
   - Port (typically 5432)
-
----
 
 ## Launch Grafana Using Docker
 
@@ -234,8 +234,6 @@ Default login credentials:
 * **Password:** admin
   (You will be prompted to change the password on first login.)
 
----
-
 ## Connect Grafana to TimescaleDB (TigerData)
 
 1. In Grafana, go to **Connections → Data sources**
@@ -257,15 +255,11 @@ Additional settings:
 
 Click **Save & Test** to verify the connection.
 
----
-
 ## Create a Fleet Telemetry Dashboard
 
 1. Go to **Dashboards → New → New Dashboard**
 2. Click **Add a new panel**
 3. Select your PostgreSQL data source
-
----
 
 ## Sample Queries for Grafana Panels
 
@@ -286,8 +280,6 @@ Suggested visualization:
 * **Time series**
 * Y-axis: Average speed (km/h)
 
----
-
 ### 2. Active Trucks (Last Known Positions)
 
 ```sql
@@ -306,8 +298,6 @@ Suggested visualization:
 * **Geomap**
 * Latitude: `latitude`
 * Longitude: `longitude`
-
----
 
 ### 3. Trucks Within a Depot Radius (Example: Vancouver)
 
@@ -331,8 +321,6 @@ Suggested visualization:
 * **Table**
 * Columns: truck_id, km_from_vancouver, time
 
----
-
 ### 4. Distance Traveled Per Truck (Daily)
 
 ```sql
@@ -348,8 +336,6 @@ ORDER BY day DESC, km_traveled DESC;
 Suggested visualization:
 
 * **Bar chart** or **Table**
-
----
 
 ## Add Panels to a Dashboard
 
@@ -367,15 +353,11 @@ Repeat to build a multi-panel dashboard showing:
 * Geofence proximity
 * Distance traveled per truck
 
----
-
 ## Suggested Dashboard Layout
 
 * **Top row:** Fleet-wide metrics (average speed, active trucks)
 * **Middle row:** Live map of truck locations
 * **Bottom row:** Distance traveled and fuel usage tables
-
----
 
 ## Summary
 
