@@ -1,113 +1,81 @@
-# TimeSeries Workshop - IoT Logistics Fleet Telemetry
+# TimeSeries Workshop – IoT Logistics Fleet Telemetry
 
 ## Overview
 
-This workshop demonstrates advanced time-series and geospatial data analysis using PostgreSQL and TigerData (TimescaleDB) for an **IoT logistics** use case,  
-eg track telemetry from a fleet of trucks moving cargo between cities. Tracking geolocation data is essential.
+This workshop demonstrates time-series and geospatial analytics using PostgreSQL and TigerData (TimescaleDB) for an **IoT logistics** use case.
 
-Each truck generates readings including:
+The scenario models a fleet of trucks transporting cargo between cities. Each truck generates **telemetry and GPS geolocation data every 5 seconds**, enabling real-time fleet tracking, geofencing, proximity analysis, and historical movement analytics.
 
-- GPS Location (Latitude/Longitude)
-- Speed (km/h)
-- Heading (degrees)
-- Engine Temperature (C)
-- Fuel Level (%)
-- Cargo Weight (kg)
-- Origin + Destination City (for the current route)
+Typical use cases include fleet monitoring, route compliance, logistics optimization, geofencing alerts, and distance-based analytics.
 
-Use case: Fleet monitoring, route compliance, geofencing, proximity search, and logistics analytics
+---
 
-## What You'll Learn
+## What You’ll Learn
 
-- **Hypertables**: Convert regular PostgreSQL tables into time-series optimized hypertables
+- **Hypertables**  
+  Convert regular PostgreSQL tables into time-series optimized hypertables
 
-- **Working with IoT Logistics Data**: Work with sample generated fleet telemetry data (telemetry + GPS)
+- **Working with IoT Logistics Data**  
+  Analyze high-frequency fleet telemetry and GPS data
 
-- **IoT Logistics Data Analysis**: Geofencing, proximity, and distance-based analytics
+- **Geospatial Analytics (PostGIS)**  
+  Perform geofencing, proximity, and distance calculations
 
-- **Columnar Compression**: Achieve ~10x storage reduction while improving query performance
+- **Columnar Compression**  
+  Reduce storage by ~10x while improving analytical query performance
 
-- **Continuous Aggregates**: Pre-compute aggregations for lightning-fast analytics
+- **Continuous Aggregates**  
+  Precompute rollups for fast, scalable analytics
 
-- **Real-time Updates**: Build materialized views that update automatically as new data arrives
+- **Real-Time Updates**  
+  Query materialized views that automatically stay up to date as new data arrives
+
+---
 
 ## Contents
 
-- **`analyze-iot-logistics-psql.sql`**: Complete workshop for psql command-line interface
+- **`analyze-iot-logistics-psql.sql`**  
+  Complete workshop script designed to be run as plain SQL in any PostgreSQL client
+
+---
 
 ## Prerequisites
 
-- Timescale Cloud account (get free trial at <https://console.cloud.timescale.com/signup>)
+- TimescaleDB (Timescale Cloud or self-hosted)
+- PostgreSQL 14+
+- PostGIS extension (enabled automatically by the script)
+- Basic SQL knowledge
 
-- Optional, but recommended - install psql CLI https://www.tigerdata.com/blog/how-to-install-psql-on-mac-ubuntu-debian-windows
+Optional:
+- `psql` CLI  
+  https://www.tigerdata.com/blog/how-to-install-psql-on-mac-ubuntu-debian-windows
 
-- Basic knowledge of SQL and relational data concepts
+---
 
-## Sample Architecture with TigerData
+## Dataset Size (Workshop Defaults)
 
-![Sample Architecture with TigerData](https://imgur.com/j1H6zxv.png)
+The default configuration in this workshop intentionally uses a **manageable but realistic dataset**:
 
-## Architecture highlights
+- **1,000 trucks**
+- **7 days of history**
+- **1 telemetry + GPS reading every 5 seconds**
 
-- **Unified Data Flow**: Ingest data from files, streams, IoT devices, and APIs into the TigerData Cloud Service (AWS or Azure)
-  
-- **Centralized Storage**: Data is organized in the TigerData Cloud Service for analytics, AI, and ML applications (with built in compression and continous real-time aggregations) 
-  
-- **Real-Time Analytics**: Enables SQL-based queries, dashboards, alerts, and visualizations using Grafana or other tools
-  
-- **AI & ML Integration**: Connects seamlessly with ChatGPT and Amazon SageMaker for data enrichment and devops automation
+This generates approximately **120 million rows**, which is large enough to:
 
-## Data Structure
+- demonstrate hypertable performance
+- show the impact of compression
+- highlight continuous aggregate speedups
+- run meaningful geospatial queries
 
-### Truck Telemetry Table
+The SQL script is written in **plain SQL** with clearly labeled constants, making it easy to scale the dataset up or down by editing the data generation section.
 
-Telemetry + geolocation are recorded in the same row (default every **5 seconds** per truck):
+---
 
-```sql
-CREATE TABLE truck_telemetry (
-   time TIMESTAMPTZ NOT NULL,
-   truck_id INTEGER NOT NULL,
-   location GEOGRAPHY(POINT, 4326),  -- GPS location (lon/lat)
-   speed_kph DOUBLE PRECISION,
-   heading_deg DOUBLE PRECISION,
-   engine_temp_c DOUBLE PRECISION,
-   fuel_pct DOUBLE PRECISION,
-   cargo_kg DOUBLE PRECISION,
-   origin_city_id INTEGER,
-   dest_city_id INTEGER
-) WITH (
-   tsdb.hypertable,
-   tsdb.partition_column='time',
-   tsdb.segmentby='truck_id',
-   tsdb.orderby='time DESC'
-);
-````
+## Data Model
 
-### Cities Table
+### Fleet Telemetry Table
 
-```sql
-CREATE TABLE cities(
-   id SERIAL PRIMARY KEY,
-   name TEXT,
-   location GEOGRAPHY(POINT, 4326)
-);
-```
-
-### Trucks Table
-
-```sql
-CREATE TABLE trucks(
-   id INTEGER PRIMARY KEY,
-   origin_city_id INTEGER,
-   dest_city_id INTEGER
-);
-```
-
-## Key Features Demonstrated
-
-### 1. Hypertable Creation
-
-Time-series optimized hypertables for fleet telemetry:
+Telemetry and GPS location are recorded together in a single hypertable.
 
 ```sql
 CREATE TABLE truck_telemetry (
@@ -121,180 +89,133 @@ CREATE TABLE truck_telemetry (
    cargo_kg DOUBLE PRECISION,
    origin_city_id INTEGER,
    dest_city_id INTEGER
-) WITH (
-   tsdb.hypertable,
-   tsdb.partition_column='time',
-   tsdb.segmentby='truck_id',
-   tsdb.orderby='time DESC'
+);
+````
+
+### Cities Table
+
+```sql
+CREATE TABLE cities (
+   id SERIAL PRIMARY KEY,
+   name TEXT,
+   location GEOGRAPHY(POINT, 4326)
 );
 ```
 
-### 2. Generate Data & Run Analytical Queries
-
-The workshop script generates synthetic data for:
-
-* configurable number of trucks
-* configurable months of history
-* configurable seconds between readings (default 5 seconds)
-
-Example: find trucks within a geofence polygon during a time window
+### Trucks Table
 
 ```sql
-WITH fence AS (
-  SELECT ST_GeomFromText(
-    'POLYGON((-122.36 47.58,-122.36 47.66,-122.28 47.66,-122.28 47.58,-122.36 47.58))',
-    4326
-  )::geography AS poly
-)
-SELECT time, truck_id
-FROM truck_telemetry, fence
-WHERE time >= now() - interval '30 minutes'
-  AND ST_Contains(fence.poly::geometry, truck_telemetry.location::geometry);
-```
-
-Example: trucks within N km of a city/depot
-
-```sql
-WITH depot AS (
-  SELECT location AS city_loc
-  FROM cities
-  WHERE name = 'Vancouver'
-)
-SELECT t.time, t.truck_id
-FROM truck_telemetry t, depot
-WHERE t.time >= now() - interval '1 hour'
-  AND ST_DWithin(t.location, depot.city_loc, 25000);
-```
-
-Example: distance traveled per truck per day (approx via consecutive GPS points)
-
-```sql
-WITH daily AS (
-  SELECT
-    time_bucket('1 day', time) AS day,
-    truck_id,
-    time,
-    location
-  FROM truck_telemetry
-  WHERE time >= now() - interval '7 days'
-),
-segments AS (
-  SELECT
-    day,
-    truck_id,
-    ST_Distance(
-      location,
-      LAG(location) OVER (PARTITION BY day, truck_id ORDER BY time)
-    ) AS meters
-  FROM daily
-)
-SELECT
-  day,
-  truck_id,
-  SUM(COALESCE(meters,0))/1000.0 AS km_traveled
-FROM segments
-GROUP BY day, truck_id;
-```
-
-Example: distance from point of origin (origin city)
-
-```sql
-WITH origin AS (
-  SELECT tr.id AS truck_id, c.location AS origin_loc
-  FROM trucks tr
-  JOIN cities c ON c.id = tr.origin_city_id
-),
-latest AS (
-  SELECT DISTINCT ON (truck_id) truck_id, time, location
-  FROM truck_telemetry
-  ORDER BY truck_id, time DESC
-)
-SELECT
-  latest.truck_id,
-  latest.time,
-  ST_Distance(latest.location, origin.origin_loc)/1000.0 AS km_from_origin
-FROM latest
-JOIN origin ON origin.truck_id = latest.truck_id
-ORDER BY km_from_origin DESC
-LIMIT 50;
-```
-
-### 3. Columnar Compression
-
-Enable ~10x storage compression with improved query performance:
-
-```sql
-CALL add_columnstore_policy('truck_telemetry', after => INTERVAL '7d');
-```
-
-### 4. Real Time Continuous Aggregates
-
-Create self-updating materialized views for instant analytics (example: daily distance per truck):
-
-```sql
-CREATE MATERIALIZED VIEW daily_truck_distance_km
-WITH (
-   timescaledb.continuous,
-   timescaledb.materialized_only = false
-) AS
-WITH daily AS (
-  SELECT
-    time_bucket('1 day', time) AS day,
-    truck_id,
-    time,
-    location
-  FROM truck_telemetry
-),
-segments AS (
-  SELECT
-    day,
-    truck_id,
-    ST_Distance(
-      location,
-      LAG(location) OVER (PARTITION BY day, truck_id ORDER BY time)
-    ) AS meters
-  FROM daily
-)
-SELECT
-  day,
-  truck_id,
-  SUM(COALESCE(meters,0))/1000.0 AS km_traveled
-FROM segments
-GROUP BY day, truck_id;
-
-SELECT add_continuous_aggregate_policy(
-   'daily_truck_distance_km',
-   start_offset => INTERVAL '14 days',
-   end_offset => INTERVAL '1 day',
-   schedule_interval => INTERVAL '1 day'
+CREATE TABLE trucks (
+   id INTEGER PRIMARY KEY,
+   origin_city_id INTEGER,
+   dest_city_id INTEGER
 );
 ```
+
+---
+
+## Sample Architecture with TigerData
+
+![Sample Architecture with TigerData](https://imgur.com/j1H6zxv.png)
+
+---
+
+## Workshop Flow
+
+The SQL script follows a structured workshop flow:
+
+1. Enable TimescaleDB and PostGIS
+2. Create reference tables (cities, trucks)
+3. Create a telemetry hypertable
+4. Generate synthetic fleet telemetry + GPS data
+5. Run baseline analytical queries
+6. Enable compression and observe storage savings
+7. Re-run queries on compressed data
+8. Create and query continuous aggregates
+9. Demonstrate real-time updates
+
+This mirrors common production workflows for IoT and logistics platforms.
+
+---
+
+## Example Analytics
+
+### Fleet Telemetry Analysis
+
+* Trucks reporting high engine temperatures
+* Average speed by time window
+* Fuel usage trends
+
+### Geospatial Analytics
+
+* Trucks inside a geofence polygon
+* Trucks within a given distance of a depot
+* Distance traveled per truck per day
+* Distance from origin city
+* Entry detection into a geographic boundary
+
+---
+
+## Compression and Storage Optimization
+
+Enable columnar compression to significantly reduce storage footprint:
+
+```sql
+CALL add_columnstore_policy('truck_telemetry', after => INTERVAL '1 day');
+```
+
+Compression typically provides:
+
+* ~10x storage reduction
+* faster analytical queries
+* lower infrastructure costs
+
+---
+
+## Continuous Aggregates
+
+Continuous aggregates precompute expensive queries and keep them up to date automatically.
+
+Example: daily distance traveled per truck
+
+```sql
+SELECT *
+FROM daily_truck_summary
+WHERE day >= NOW() - INTERVAL '7 days'
+ORDER BY day DESC;
+```
+
+This enables sub-second analytics over large telemetry datasets.
+
+---
 
 ## Getting Started
 
-### Using psql Command Line
+1. Connect to your TimescaleDB instance
+2. Run the workshop script:
 
-1. Follow the instructions in `analyze-iot-logistics-psql.sql`
+```sql
+\i analyze-iot-logistics-psql.sql
+```
 
-2. The script will generate sample data and guide you through each step
+(or execute the file using your SQL client)
 
-3. Includes timing comparisons to demonstrate performance improvements
+3. Follow the comments in the SQL file step by step
 
-## Workshop Highlights
+---
 
-* **Fleet Telemetry + GPS**: Work with sample generated IoT logistics data (telemetry and geolocation every 5 seconds)
-* **Geospatial Analytics**: Geofencing, proximity search, and distance traveled analytics with PostGIS
-* **Performance Optimization**: Compare query times before and after compression
-* **Storage Efficiency**: See ~10x storage reduction with columnar compression
-* **Automatic Updates**: Demonstrate real-time continuous aggregate updates
-* **Production Ready**: Learn policies for automatic compression and aggregate refreshing
+## Intended Audience
 
-## Performance Benefits
+* Data engineers
+* Platform engineers
+* Solution architects
+* Developers working with:
 
-* **Hypertables**: Automatic partitioning for optimal time-series queries
-* **Geospatial Indexing**: Fast geofence and proximity queries using GiST indexes
-* **Columnar Storage**: Significant storage reduction with faster analytical queries
-* **Continuous Aggregates**: Sub-second response times for common rollups
-* **Automatic Policies**: Set-and-forget data lifecycle management
+  * IoT platforms
+  * Fleet tracking systems
+  * Logistics and supply chain analytics
+  * Geospatial data
+
+---
 
 ## License
