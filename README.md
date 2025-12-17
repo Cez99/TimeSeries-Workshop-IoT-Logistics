@@ -1,10 +1,3 @@
-Here is a **clean, GitHub-ready `README.md`**, directly uploadable, following the **same structure, tone, and level of polish** as the sample you uploaded — no extra commentary.
-
-Just copy this into a file named `README.md`.
-
----
-
-````md
 # TimeSeries Workshop – IoT Logistics Fleet Telemetry
 
 ## Overview
