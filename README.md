@@ -298,6 +298,3 @@ SELECT add_continuous_aggregate_policy(
 * **Automatic Policies**: Set-and-forget data lifecycle management
 
 ## License
-
-```
-
