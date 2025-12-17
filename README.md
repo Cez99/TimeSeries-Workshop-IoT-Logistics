@@ -202,13 +202,4 @@ Create self-updating materialized views for daily fleet analytics, such as dista
 
 ## License
 
-```
-
----
-
-If you want, I can now:
-- align naming exactly with **TigerData-Workshops**
-- add a **Grafana dashboard section**
-- tailor it for **conference demos vs workshops**
-- generate a matching `LICENSE` and repo description
-```
+`
