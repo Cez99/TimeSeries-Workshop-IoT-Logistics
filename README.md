@@ -1,43 +1,35 @@
-# TimeSeries Workshop – IoT Logistics Fleet Telemetry
+
+# TimeSeries Workshop - IoT Logistics Fleet Telemetry
 
 ## Overview
 
-This workshop demonstrates time-series and geospatial analytics using PostgreSQL and TigerData (TimescaleDB) for an **IoT logistics** use case.
+This workshop demonstrates advanced time-series and geospatial data analysis using PostgreSQL and TigerData (TimescaleDB) for IoT logistics.
 
-The scenario models a fleet of trucks transporting cargo between cities. Each truck generates **telemetry and GPS geolocation data every 5 seconds**, enabling real-time fleet tracking, geofencing, proximity analysis, and historical movement analytics.
+The use case models a fleet of trucks transporting cargo between cities. Each truck emits telemetry and GPS location (latitude/longitude) every 5 seconds, enabling real-time fleet tracking, route analytics, geofencing, and distance-based operational insights.
 
-Typical use cases include fleet monitoring, route compliance, logistics optimization, geofencing alerts, and distance-based analytics.
+Telemetry includes:
 
----
+- Timestamp
+- GPS location (latitude/longitude)
+- Speed (km/h)
+- Heading (degrees)
+- Engine temperature (°C)
+- Fuel level (%)
+- Cargo weight (kg)
+- Origin city and destination city
 
 ## What You’ll Learn
 
-- **Hypertables**  
-  Convert regular PostgreSQL tables into time-series optimized hypertables
-
-- **Working with IoT Logistics Data**  
-  Analyze high-frequency fleet telemetry and GPS data
-
-- **Geospatial Analytics (PostGIS)**  
-  Perform geofencing, proximity, and distance calculations
-
-- **Columnar Compression**  
-  Reduce storage by ~10x while improving analytical query performance
-
-- **Continuous Aggregates**  
-  Precompute rollups for fast, scalable analytics
-
-- **Real-Time Updates**  
-  Query materialized views that automatically stay up to date as new data arrives
-
----
+- **Hypertables**: Store high-frequency IoT telemetry efficiently using TimescaleDB
+- **Working with Fleet Telemetry Data**: Work with sample generated fleet IoT data (telemetry + GPS)
+- **Geospatial Analytics (PostGIS)**: Perform geofencing, proximity, and distance calculations
+- **Columnar Compression**: Reduce storage footprint while improving query performance
+- **Continuous Aggregates**: Pre-compute daily summaries for fast analytics
+- **Real-Time Updates**: Build materialized views that update as new data arrives
 
 ## Contents
 
-- **`analyze-iot-logistics-psql.sql`**  
-  Complete workshop script designed to be run as plain SQL in any PostgreSQL client
-
----
+- **`analyze-iot-logistics-psql.sql`**: Complete workshop script
 
 ## Prerequisites
 
@@ -45,37 +37,12 @@ Typical use cases include fleet monitoring, route compliance, logistics optimiza
 - PostgreSQL 14+
 - PostGIS extension (enabled automatically by the script)
 - Basic SQL knowledge
-
-Optional:
-- `psql` CLI  
+- Optional, but recommended: install psql CLI  
   https://www.tigerdata.com/blog/how-to-install-psql-on-mac-ubuntu-debian-windows
 
----
+## Data Structure
 
-## Dataset Size (Workshop Defaults)
-
-The default configuration in this workshop intentionally uses a **manageable but realistic dataset**:
-
-- **1,000 trucks**
-- **7 days of history**
-- **1 telemetry + GPS reading every 5 seconds**
-
-This generates approximately **120 million rows**, which is large enough to:
-
-- demonstrate hypertable performance
-- show the impact of compression
-- highlight continuous aggregate speedups
-- run meaningful geospatial queries
-
-The SQL script is written in **plain SQL** with clearly labeled constants, making it easy to scale the dataset up or down by editing the data generation section.
-
----
-
-## Data Model
-
-### Fleet Telemetry Table
-
-Telemetry and GPS location are recorded together in a single hypertable.
+### Truck Telemetry Table
 
 ```sql
 CREATE TABLE truck_telemetry (
@@ -112,110 +79,120 @@ CREATE TABLE trucks (
 );
 ```
 
----
+## Synthetic Data Generation
 
-## Sample Architecture with TigerData
+The workshop script generates a **manageable dataset** using:
 
-![Sample Architecture with TigerData](https://imgur.com/j1H6zxv.png)
+* **1,000 trucks**
+* **7 days of history**
+* **1 reading every 5 seconds per truck**
 
----
+This yields ~120 million rows, which is large enough to demonstrate:
 
-## Workshop Flow
+* Time-series ingestion performance
+* Query performance with and without compression
+* Geospatial analysis (geofencing, proximity, distance)
+* Continuous aggregate speedups
 
-The SQL script follows a structured workshop flow:
+The synthetic movement model approximates trucking routes between cities and interpolates GPS points along those routes using a deterministic journey model written entirely in SQL.
 
-1. Enable TimescaleDB and PostGIS
-2. Create reference tables (cities, trucks)
-3. Create a telemetry hypertable
-4. Generate synthetic fleet telemetry + GPS data
-5. Run baseline analytical queries
-6. Enable compression and observe storage savings
-7. Re-run queries on compressed data
-8. Create and query continuous aggregates
-9. Demonstrate real-time updates
+## Getting Started
 
-This mirrors common production workflows for IoT and logistics platforms.
+Run the workshop SQL script in your PostgreSQL client:
 
----
+```bash
+psql -h <host> -U <user> -d <db> -f analyze-iot-logistics-psql.sql
+```
 
-## Example Analytics
+or choose your preferred SQL client.
 
-### Fleet Telemetry Analysis
+Follow the comments in the script step by step.
 
-* Trucks reporting high engine temperatures
-* Average speed by time window
-* Fuel usage trends
+## Sample Queries
 
-### Geospatial Analytics
+### Latest Known Position per Truck
 
-* Trucks inside a geofence polygon
-* Trucks within a given distance of a depot
-* Distance traveled per truck per day
-* Distance from origin city
-* Entry detection into a geographic boundary
+```sql
+SELECT DISTINCT ON (truck_id)
+  truck_id, time, location, speed_kph, fuel_pct
+FROM truck_telemetry
+ORDER BY truck_id, time DESC;
+```
 
----
+### Trucks in a Geofence (Example Polygon)
 
-## Compression and Storage Optimization
+```sql
+WITH fence AS (
+  SELECT ST_GeomFromText(
+    'POLYGON((-122.36 47.58,-122.36 47.66,-122.28 47.66,-122.28 47.58,-122.36 47.58))',
+    4326
+  )::geography AS poly
+)
+SELECT
+  time, truck_id
+FROM truck_telemetry, fence
+WHERE ST_Contains(fence.poly::geometry, truck_telemetry.location::geometry)
+  AND time >= NOW() - INTERVAL '30 minutes';
+```
 
-Enable columnar compression to significantly reduce storage footprint:
+### Distance Traveled per Truck (Daily)
+
+```sql
+WITH daily AS (
+  SELECT
+    time_bucket('1 day', time) AS day,
+    truck_id,
+    ST_Distance(
+      location,
+      LAG(location) OVER (PARTITION BY day, truck_id ORDER BY time)
+    ) AS dist
+  FROM truck_telemetry
+)
+SELECT day, truck_id, SUM(COALESCE(dist,0)) / 1000 AS km_traveled
+FROM daily
+GROUP BY day, truck_id;
+```
+
+## Compression & Continuous Aggregates
+
+### Enable Automatic Compression
 
 ```sql
 CALL add_columnstore_policy('truck_telemetry', after => INTERVAL '1 day');
 ```
 
-Compression typically provides:
-
-* ~10x storage reduction
-* faster analytical queries
-* lower infrastructure costs
-
----
-
-## Continuous Aggregates
-
-Continuous aggregates precompute expensive queries and keep them up to date automatically.
-
-Example: daily distance traveled per truck
+### Create Continuous Aggregate (Daily Distance)
 
 ```sql
-SELECT *
-FROM daily_truck_summary
-WHERE day >= NOW() - INTERVAL '7 days'
-ORDER BY day DESC;
+CREATE MATERIALIZED VIEW daily_truck_distance_km
+WITH (
+  timescaledb.continuous,
+  timescaledb.materialized_only = false
+) AS
+SELECT
+  time_bucket('1 day', time) AS day,
+  truck_id,
+  SUM(distance_meters)/1000 AS km_traveled
+FROM (
+  SELECT
+    time,
+    truck_id,
+    ST_Distance(
+      location,
+      LAG(location) OVER (PARTITION BY truck_id ORDER BY time)
+    ) AS distance_meters
+  FROM truck_telemetry
+) sub
+GROUP BY day, truck_id;
 ```
-
-This enables sub-second analytics over large telemetry datasets.
-
----
-
-## Getting Started
-
-1. Connect to your TimescaleDB instance
-2. Run the workshop script:
-
-```sql
-\i analyze-iot-logistics-psql.sql
-```
-
-(or execute the file using your SQL client)
-
-3. Follow the comments in the SQL file step by step
-
----
 
 ## Intended Audience
 
 * Data engineers
 * Platform engineers
-* Solution architects
-* Developers working with:
-
-  * IoT platforms
-  * Fleet tracking systems
-  * Logistics and supply chain analytics
-  * Geospatial data
-
----
+* Architects
+* Developers building IoT, logistics, or geospatial analytics systems
 
 ## License
+
+MIT License
